@@ -77,6 +77,26 @@ export async function createAdminSession(secret) {
   return `${payload}.${await hmac(payload, secret)}`;
 }
 
+export function adminSecret(env) {
+  return env.ADMIN_SESSION_SECRET || env.ADMIN_PASSWORD || '';
+}
+
+export async function createOAuthState(secret) {
+  const payload = btoa(JSON.stringify({ exp: Date.now() + 1000 * 60 * 10, nonce: crypto.randomUUID() }));
+  return `${payload}.${await hmac(payload, secret)}`;
+}
+
+export async function verifyOAuthState(value, secret) {
+  if (!value || !secret) return false;
+  const [payload, signature] = String(value).split('.');
+  if (!payload || !signature || (await hmac(payload, secret)) !== signature) return false;
+  try {
+    return JSON.parse(atob(payload)).exp > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 export async function isAdmin(request, secret) {
   if (!secret) return false;
   const raw = request.headers.get('cookie') || '';

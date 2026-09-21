@@ -1,7 +1,7 @@
-import { error, isAdmin, json } from '../../_lib.js';
+import { adminSecret, error, isAdmin, json } from '../../_lib.js';
 
 export async function onRequestGet(context) {
-  if (!await isAdmin(context.request, context.env.ADMIN_PASSWORD)) return error('Admin login required.', 401, 'unauthorized');
+  if (!await isAdmin(context.request, adminSecret(context.env))) return error('Admin login required.', 401, 'unauthorized');
   const db = context.env.VAYUTA_DB;
   if (!db) return error('Commerce database is not configured.', 503);
   const [orders, revenue, pending, inquiries] = await Promise.all([

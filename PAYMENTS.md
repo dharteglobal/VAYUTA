@@ -8,7 +8,7 @@ The storefront and Cloudflare Pages Functions already support three hosted payme
 
 Add provider credentials as production secrets on the Pages project, then redeploy. Never place secret keys in `dist`, HTML, or client-side JavaScript.
 
-The private admin portal is at `/admin/` and uses `ADMIN_EMAIL` plus the `ADMIN_PASSWORD` Pages secret. The current production admin email is `admin@vayuta.com`.
+The private admin portal is at `/admin/` and uses Google OAuth only. Set `ADMIN_EMAIL` to the exact authorised Google address, then configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI=https://vayuta.com/api/admin/google/callback` as Pages values/secrets. The current authorised admin email is `tarunthadani@gmail.com`.
 
 Stripe should send `checkout.session.completed` events to:
 

@@ -6,7 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "PUBLIC_APP_URL": "https://vayuta.com",
-    "ADMIN_EMAIL": "admin@vayuta.com",
+    "ADMIN_EMAIL": "tarunthadani@gmail.com",
+    "GOOGLE_CLIENT_ID": "262900362504-kn1dka5varognbjbiig7tut11lbv4slb.apps.googleusercontent.com",
+    "GOOGLE_REDIRECT_URI": "https://vayuta.com/api/admin/google/callback",
     "PAYU_ENV": "test",
     "PAYPAL_ENV": "sandbox"
   },
