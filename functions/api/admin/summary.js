@@ -6,7 +6,7 @@ export async function onRequestGet(context) {
   if (!db) return error('Commerce database is not configured.', 503);
   const [orders, revenue, pending, inquiries] = await Promise.all([
     db.prepare('SELECT COUNT(*) AS count FROM orders').first(),
-    db.prepare("SELECT COALESCE(SUM(total_inr), 0) AS total FROM orders WHERE status = 'paid'").first(),
+    db.prepare("SELECT COALESCE(SUM(total_inr), 0) AS total FROM orders WHERE status IN ('paid', 'packing', 'shipped', 'delivered')").first(),
     db.prepare("SELECT COUNT(*) AS count FROM orders WHERE status IN ('pending_payment', 'payment_review')").first(),
     db.prepare('SELECT COUNT(*) AS count FROM inquiries').first(),
   ]);

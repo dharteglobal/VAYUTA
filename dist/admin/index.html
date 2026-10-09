@@ -1,2 +1,198 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>VAYUTA Admin</title><style>:root{--paper:#f6f4ef;--ink:#111;--muted:#716f69;--line:rgba(17,17,17,.16)}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 Arial,sans-serif}button,input,select{font:inherit}.shell{max-width:1200px;margin:auto;padding:30px 24px}.mono{font:12px/1.4 monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}h1,h2{font-weight:700;letter-spacing:-.07em;line-height:.95}h1{font-size:clamp(42px,7vw,86px);margin:24px 0 36px}h2{font-size:28px;margin:0 0 18px}.panel{border:1px solid var(--ink);padding:28px;background:#fff}.login{max-width:470px;margin:13vh auto}.login p{color:var(--muted);margin:0 0 24px}.google-button{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:14px 18px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none;font-weight:700}.google-mark{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#fff;color:#111;font-weight:700;font-size:14px}.error{min-height:24px;color:#9e3636}.top{display:flex;align-items:end;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:28px}.ghost{border:1px solid var(--ink);background:transparent;color:var(--ink);padding:12px 18px;border-radius:999px;cursor:pointer}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:28px}.stat{background:#fff;padding:20px}.stat b{display:block;font-size:28px;letter-spacing:-.06em}.stat span{font:11px monospace;text-transform:uppercase;color:var(--muted)}.grid{display:grid;grid-template-columns:1.3fr .7fr;gap:24px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;border-bottom:1px solid var(--line);padding:12px 8px;white-space:nowrap}th{font:11px monospace;text-transform:uppercase;color:var(--muted)}td small{display:block;color:var(--muted)}.status{padding:7px 9px;border:1px solid var(--line);background:var(--paper);font-size:12px}.request{padding:13px 0;border-bottom:1px solid var(--line)}.request p{margin:5px 0;color:var(--muted)}.hidden{display:none!important}@media(max-width:760px){.shell{padding:20px 14px}.top{display:block}.top button{margin-top:18px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.panel{padding:18px}th,td{font-size:12px}}
-</style></head><body><main class="shell"><section id="loginView" class="panel login"><span class="mono">VAYUTA / private operations</span><h1>Keep the circle<br>moving.</h1><p>Admin access is limited to the authorised Google account.</p><a class="google-button" href="/api/admin/google/start"><span class="google-mark">G</span>Continue with Google</a><p id="loginError" class="error" aria-live="polite"></p></section><section id="dashboardView" class="hidden"><div class="top"><div><span class="mono">VAYUTA / private operations</span><h1>Keep the circle<br>moving.</h1></div><button id="logout" class="ghost">Log out</button></div><div class="stats"><div class="stat"><b id="statOrders">—</b><span>orders</span></div><div class="stat"><b id="statRevenue">—</b><span>paid revenue</span></div><div class="stat"><b id="statPending">—</b><span>awaiting payment</span></div><div class="stat"><b id="statInquiries">—</b><span>messages</span></div></div><div class="grid"><section class="panel"><span class="mono">latest orders</span><h2>Order desk</h2><div class="table-wrap"><table><thead><tr><th>order</th><th>customer</th><th>total</th><th>status</th><th>created</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section><section class="panel"><span class="mono">inbox</span><h2>Requests</h2><div id="requests"></div></section></div></section></main><script>const $=s=>document.querySelector(s),fmt=n=>'₹'+Number(n).toLocaleString('en-IN');const errors={access_denied:'Google sign-in was cancelled.',invalid_state:'The sign-in session expired. Try again.',google_not_configured:'Google sign-in is being configured.',token_exchange_failed:'Google sign-in could not be completed.',profile_failed:'Google profile could not be read.',unauthorized_email:'Use the authorised VAYUTA admin Google account.'};const code=new URLSearchParams(location.search).get('error');if(code)$('#loginError').textContent=errors[code]||'Sign-in could not be completed.';async function api(url,opts){const r=await fetch(url,opts);const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d}async function load(){try{const summary=await api('/api/admin/summary');$('#loginView').classList.add('hidden');$('#dashboardView').classList.remove('hidden');$('#statOrders').textContent=summary.stats.orders;$('#statRevenue').textContent=fmt(summary.stats.revenue);$('#statPending').textContent=summary.stats.pending;$('#statInquiries').textContent=summary.stats.inquiries;const orders=await api('/api/admin/orders');$('#ordersBody').innerHTML=orders.orders.length?orders.orders.map(o=>`<tr><td><b>${o.id.slice(-8)}</b><small>${o.variant||''} · ${o.color||''}</small></td><td>${o.customer_name}<small>${o.email}</small></td><td>${fmt(o.total_inr)}</td><td><select class="status" data-id="${o.id}">${['pending_payment','paid','payment_review','payment_failed','packing','shipped','delivered','cancelled'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select></td><td>${new Date(o.created_at).toLocaleDateString()}</td></tr>`).join(''):'<tr><td colspan="5">No orders yet.</td></tr>';document.querySelectorAll('.status').forEach(s=>s.onchange=async()=>{await api('/api/admin/order-status',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({orderId:s.dataset.id,status:s.value})})});const requests=await api('/api/admin/requests');$('#requests').innerHTML=requests.requests.length?requests.requests.map(r=>`<div class="request"><b>${r.type}</b><small>${r.name||''} · ${r.email}</small><p>${r.brief||r.project||''}</p></div>`).join(''):'<p>No messages yet.</p>'}catch(e){if(!$('#dashboardView').classList.contains('hidden'))alert(e.message)}}$('#logout').onclick=async()=>{await api('/api/admin/logout',{method:'POST'});location.reload()};load();</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f4ef">
+  <meta name="robots" content="noindex, nofollow">
+  <title>VAYUTA — Admin</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111111'/%3E%3Cpath d='M15 22c14-9 22-7 33 0M15 32c12-7 21-6 34 0M15 42c11-6 20-5 32 0' fill='none' stroke='%23f6f4ef' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='18' cy='22' r='3' fill='%23ec6a46'/%3E%3C/svg%3E">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    :root{--paper:#f6f4ef;--paper-2:#ebe8e1;--ink:#111;--muted:#716f69;--line:rgba(17,17,17,.17);--orange:#ec6a46;--green:#3e7040;--red:#9e3636;--sans:'DM Sans',Arial,sans-serif;--display:'Space Grotesk',Arial,sans-serif;--mono:'DM Mono',monospace}
+    *{box-sizing:border-box}html{font-size:16px}body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.5}body:before{content:"";pointer-events:none;position:fixed;inset:0;z-index:20;opacity:.045;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");mix-blend-mode:multiply}button,input,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}.mono{font:500 .72rem/1.35 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+    .shell{max-width:1440px;margin:auto;padding:0 28px 56px}.login-shell{min-height:100vh;display:grid;place-items:center;padding:24px}.login-card{width:min(520px,100%);border:1px solid var(--ink);background:#fff;padding:38px;box-shadow:12px 14px 0 var(--paper-2)}.login-mark{display:flex;align-items:center;gap:12px;font-family:var(--display);font-size:1.2rem;font-weight:700;letter-spacing:-.05em}.login-mark img{width:42px;height:42px;object-fit:contain}.login-card h1{font:700 clamp(3.3rem,10vw,6.2rem)/.86 var(--display);letter-spacing:-.1em;margin:50px 0 28px}.login-card p{color:var(--muted);max-width:390px;margin:0 0 26px}.google-button{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:15px 20px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none;font-weight:700}.google-mark{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#fff;color:#111;font-weight:700}.error{min-height:24px;color:var(--red);margin:14px 0 0!important;font-size:.9rem}
+    .topbar{min-height:88px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{display:flex;align-items:center;gap:12px;font:700 1.2rem var(--display);letter-spacing:-.05em}.brand img{width:42px;height:42px;object-fit:contain}.top-actions{display:flex;align-items:center;gap:10px}.button{border:1px solid var(--ink);background:transparent;color:var(--ink);padding:10px 15px;border-radius:999px;font-weight:600}.button.primary{background:var(--ink);color:var(--paper)}.button:disabled{opacity:.5;cursor:wait}.heading{display:flex;align-items:end;justify-content:space-between;gap:32px;padding:42px 0 28px}.heading h1{font:700 clamp(3.2rem,7vw,7rem)/.84 var(--display);letter-spacing:-.1em;margin:10px 0 0}.heading-note{max-width:320px;color:var(--muted);margin:0 0 4px}.heading-note b{color:var(--ink)}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:26px}.stat{background:#fff;padding:21px 22px;min-height:104px;display:flex;flex-direction:column;justify-content:space-between}.stat strong{font:600 2rem/1 var(--display);letter-spacing:-.07em}.stat span{font:500 .68rem var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+    .workspace{border:1px solid var(--ink);background:#fff}.workspace-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px;border-bottom:1px solid var(--line)}.tabs{display:flex;gap:6px}.tab{border:1px solid transparent;background:transparent;padding:10px 14px;border-radius:999px;font-weight:700}.tab[aria-selected="true"]{background:var(--ink);color:var(--paper)}.count{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:999px;margin-left:6px;background:var(--paper-2);color:var(--ink);font:500 .68rem var(--mono)}.tab[aria-selected="true"] .count{background:var(--paper);color:var(--ink)}.filters{display:flex;align-items:center;gap:8px}.search{width:min(300px,35vw);border:1px solid var(--line);background:var(--paper);padding:10px 12px;outline:0}.search:focus{border-color:var(--ink)}.filters select{border:1px solid var(--line);background:var(--paper);padding:10px 32px 10px 12px}
+    .table-wrap{overflow:auto;min-height:300px}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;border-bottom:1px solid var(--line);padding:15px 13px;vertical-align:top}th{font:500 .66rem var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--paper);position:sticky;top:0;z-index:1}tr:last-child td{border-bottom:0}.order-id{font-family:var(--mono);font-size:.76rem}.main-value{font-weight:700}.meta{display:block;color:var(--muted);font-size:.8rem;margin-top:3px;max-width:270px;white-space:normal}.address{max-width:260px}.price{font:600 1rem var(--display)}.status-select{width:152px;border:1px solid var(--line);background:var(--paper);padding:8px 10px}.status-select.saving{opacity:.55}.status-note{min-height:18px;color:var(--green);font-size:.72rem;margin-top:3px}.empty{padding:64px 20px;text-align:center;color:var(--muted)}
+    .inquiries{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line)}.inquiry{background:#fff;padding:23px;min-height:260px;display:flex;flex-direction:column}.inquiry-top{display:flex;justify-content:space-between;gap:18px}.pill{display:inline-block;border:1px solid var(--ink);border-radius:999px;padding:5px 9px;font:500 .65rem var(--mono);letter-spacing:.06em;text-transform:uppercase}.inquiry time{font:400 .68rem var(--mono);color:var(--muted)}.inquiry h3{font:600 1.4rem/1.05 var(--display);letter-spacing:-.05em;margin:30px 0 5px}.inquiry a{color:inherit;text-decoration-thickness:1px;text-underline-offset:3px}.project{font:500 .7rem var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--orange);margin:15px 0 0}.brief{color:#45433f;white-space:pre-wrap;overflow-wrap:anywhere}.reply{margin-top:auto;padding-top:22px;font-weight:700}
+    .loading{padding:80px 20px;text-align:center;color:var(--muted)}.loading:before{content:"";display:block;width:30px;height:30px;border:2px solid var(--line);border-top-color:var(--ink);border-radius:50%;margin:0 auto 14px;animation:spin .8s linear infinite}.toast{position:fixed;right:24px;bottom:24px;z-index:30;max-width:min(390px,calc(100vw - 48px));background:var(--ink);color:var(--paper);padding:13px 17px;box-shadow:7px 8px 0 rgba(17,17,17,.16);transform:translateY(120px);opacity:0;transition:.25s}.toast.show{transform:none;opacity:1}.toast.error-toast{background:var(--red)}@keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:980px){.inquiries{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(2,1fr)}.heading{align-items:start}.heading-note{padding-top:14px}}
+    @media(max-width:700px){.shell{padding:0 14px 34px}.login-card{padding:26px}.topbar{min-height:72px}.topbar .mono{display:none}.heading{display:block;padding:34px 0 22px}.heading-note{margin-top:24px}.workspace-head{align-items:stretch;flex-direction:column}.filters{width:100%}.search{width:100%;min-width:0}.filters select{max-width:44%}.inquiries{grid-template-columns:1fr}.top-actions .button{padding:8px 11px}.top-actions .button span{display:none}.stats{margin-bottom:18px}.stat{padding:17px;min-height:92px}.stat strong{font-size:1.7rem}.workspace{margin:0 -1px}.table-wrap{min-height:240px}th,td{padding:12px 10px}.login-card h1{margin-top:38px}}
+  </style>
+</head>
+<body>
+  <main id="loginView" class="login-shell">
+    <section class="login-card" aria-labelledby="loginTitle">
+      <div class="login-mark"><img src="/assets/vayuta-product-mark.png" alt="">VAYUTA</div>
+      <span class="mono" style="display:block;margin-top:38px">Private operations</span>
+      <h1 id="loginTitle">Keep the<br>circle moving.</h1>
+      <p>Sign in with the authorised VAYUTA Google account to view customer orders and inquiries.</p>
+      <a class="google-button" href="/api/admin/google/start"><span class="google-mark" aria-hidden="true">G</span>Continue with Google</a>
+      <p id="loginError" class="error" role="alert"></p>
+    </section>
+  </main>
+
+  <main id="dashboardView" class="shell hidden">
+    <header class="topbar">
+      <div class="brand"><img src="/assets/vayuta-product-mark.png" alt="">VAYUTA <span class="mono">/ admin</span></div>
+      <div class="top-actions">
+        <button id="refresh" class="button" type="button"><span>Refresh </span>data</button>
+        <button id="logout" class="button primary" type="button">Log out</button>
+      </div>
+    </header>
+
+    <section class="heading">
+      <div><span class="mono">Private operations</span><h1>Order<br>desk.</h1></div>
+      <p class="heading-note"><b id="lastUpdated">Loading the latest activity…</b><br>Orders and customer messages from vayuta.com.</p>
+    </section>
+
+    <section class="stats" aria-label="Business summary">
+      <div class="stat"><span>Orders</span><strong id="statOrders">—</strong></div>
+      <div class="stat"><span>Paid revenue</span><strong id="statRevenue">—</strong></div>
+      <div class="stat"><span>Awaiting payment</span><strong id="statPending">—</strong></div>
+      <div class="stat"><span>Inquiries</span><strong id="statInquiries">—</strong></div>
+    </section>
+
+    <section class="workspace" aria-label="Orders and inquiries">
+      <div class="workspace-head">
+        <div class="tabs" role="tablist" aria-label="Admin sections">
+          <button class="tab" id="ordersTab" role="tab" aria-selected="true" aria-controls="ordersPanel">Orders <span class="count" id="ordersCount">0</span></button>
+          <button class="tab" id="inquiriesTab" role="tab" aria-selected="false" aria-controls="inquiriesPanel">Inquiries <span class="count" id="inquiriesCount">0</span></button>
+        </div>
+        <div class="filters" id="orderFilters">
+          <input class="search" id="orderSearch" type="search" placeholder="Search orders or customers" aria-label="Search orders">
+          <select id="statusFilter" aria-label="Filter orders by status"><option value="">All statuses</option></select>
+        </div>
+        <div class="filters hidden" id="inquiryFilters">
+          <input class="search" id="inquirySearch" type="search" placeholder="Search inquiries" aria-label="Search inquiries">
+        </div>
+      </div>
+
+      <div id="loading" class="loading">Loading activity</div>
+      <div id="ordersPanel" role="tabpanel" aria-labelledby="ordersTab" class="hidden">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Order</th><th>Customer</th><th>Delivery</th><th>Payment</th><th>Status</th><th>Placed</th></tr></thead>
+            <tbody id="ordersBody"></tbody>
+          </table>
+        </div>
+        <div id="ordersEmpty" class="empty hidden">No orders match this view.</div>
+      </div>
+      <div id="inquiriesPanel" role="tabpanel" aria-labelledby="inquiriesTab" class="hidden">
+        <div id="inquiries" class="inquiries"></div>
+        <div id="inquiriesEmpty" class="empty hidden">No inquiries match this view.</div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const STATUSES=['pending_payment','paid','payment_review','payment_failed','payment_error','packing','shipped','delivered','cancelled'];
+    const LABELS={pending_payment:'Pending payment',paid:'Paid',payment_review:'Payment review',payment_failed:'Payment failed',payment_error:'Payment error',packing:'Packing',shipped:'Shipped',delivered:'Delivered',cancelled:'Cancelled'};
+    const errors={access_denied:'Google sign-in was cancelled.',invalid_state:'The sign-in session expired. Try again.',google_not_configured:'Google sign-in is being configured.',token_exchange_failed:'Google sign-in could not be completed.',profile_failed:'Google profile could not be read.',unauthorized_email:'Use the authorised VAYUTA admin Google account.'};
+    const state={orders:[],inquiries:[],active:'orders'};
+    const $=selector=>document.querySelector(selector);
+    const money=value=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(Number(value)||0);
+    const dateTime=value=>value?new Intl.DateTimeFormat('en-IN',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)):'—';
+    const text=(tag,value,className)=>{const node=document.createElement(tag);node.textContent=value??'';if(className)node.className=className;return node};
+
+    const code=new URLSearchParams(location.search).get('error');
+    if(code)$('#loginError').textContent=errors[code]||'Sign-in could not be completed.';
+
+    async function api(url,options){
+      const response=await fetch(url,options);
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok){const err=new Error(data.error||'Request failed');err.status=response.status;throw err}
+      return data;
+    }
+
+    function showToast(message,isError=false){
+      const toast=$('#toast');toast.textContent=message;toast.classList.toggle('error-toast',isError);toast.classList.add('show');
+      clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.classList.remove('show'),2600);
+    }
+
+    function setTab(name){
+      state.active=name;const orders=name==='orders';
+      $('#ordersTab').setAttribute('aria-selected',String(orders));$('#inquiriesTab').setAttribute('aria-selected',String(!orders));
+      $('#ordersPanel').classList.toggle('hidden',!orders);$('#inquiriesPanel').classList.toggle('hidden',orders);
+      $('#orderFilters').classList.toggle('hidden',!orders);$('#inquiryFilters').classList.toggle('hidden',orders);
+      (orders?$('#orderSearch'):$('#inquirySearch')).focus();
+    }
+
+    function renderOrders(){
+      const query=$('#orderSearch').value.trim().toLowerCase();const status=$('#statusFilter').value;
+      const rows=state.orders.filter(order=>{
+        const haystack=[order.id,order.customer_name,order.email,order.phone,order.city,order.state,order.postal_code,order.provider,order.variant,order.color].join(' ').toLowerCase();
+        return (!query||haystack.includes(query))&&(!status||order.status===status);
+      });
+      const body=$('#ordersBody');body.replaceChildren();
+      for(const order of rows){
+        const row=document.createElement('tr');
+        const orderCell=document.createElement('td');orderCell.append(text('span',String(order.id||'').slice(-10),'order-id'),text('span',[order.variant,order.color,order.quantity?`× ${order.quantity}`:''].filter(Boolean).join(' · '),'meta'));
+        const customer=document.createElement('td');customer.append(text('span',order.customer_name||'—','main-value'),text('span',order.email||'','meta'),text('span',order.phone||'','meta'));
+        const delivery=document.createElement('td');delivery.className='address';delivery.append(text('span',order.address_line1||'—'),text('span',[order.city,order.state,order.postal_code,order.country].filter(Boolean).join(', '),'meta'));
+        const payment=document.createElement('td');payment.append(text('span',money(order.total_inr),'price'),text('span',order.provider||'—','meta'));
+        const statusCell=document.createElement('td');const select=document.createElement('select');select.className='status-select';select.setAttribute('aria-label',`Status for order ${order.id}`);select.dataset.id=order.id;
+        for(const value of STATUSES){const option=document.createElement('option');option.value=value;option.textContent=LABELS[value]||value;if(value===order.status)option.selected=true;select.append(option)}
+        const note=text('div','','status-note');select.addEventListener('change',()=>updateStatus(order,select,note));statusCell.append(select,note);
+        const placed=document.createElement('td');placed.append(text('span',dateTime(order.created_at)),text('span',`Updated ${dateTime(order.updated_at)}`,'meta'));
+        row.append(orderCell,customer,delivery,payment,statusCell,placed);body.append(row);
+      }
+      $('#ordersEmpty').classList.toggle('hidden',rows.length!==0);$('.table-wrap').classList.toggle('hidden',rows.length===0);
+    }
+
+    async function updateStatus(order,select,note){
+      const previous=order.status;const next=select.value;select.disabled=true;select.classList.add('saving');note.textContent='Saving…';
+      try{await api('/api/admin/order-status',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({orderId:order.id,status:next})});order.status=next;note.textContent='Saved';showToast(`Order ${String(order.id).slice(-8)} updated`);await refreshSummary()}
+      catch(error){select.value=previous;note.textContent='Not saved';showToast(error.message,true)}
+      finally{select.disabled=false;select.classList.remove('saving');setTimeout(()=>{note.textContent=''},1800)}
+    }
+
+    function renderInquiries(){
+      const query=$('#inquirySearch').value.trim().toLowerCase();
+      const rows=state.inquiries.filter(item=>[item.type,item.name,item.email,item.project,item.brief].join(' ').toLowerCase().includes(query));
+      const container=$('#inquiries');container.replaceChildren();
+      for(const item of rows){
+        const card=document.createElement('article');card.className='inquiry';
+        const top=document.createElement('div');top.className='inquiry-top';top.append(text('span',item.type||'General','pill'),text('time',dateTime(item.created_at)));
+        const title=text('h3',item.name||'Unnamed inquiry');const email=document.createElement('a');email.href=`mailto:${encodeURIComponent(item.email||'')}`;email.textContent=item.email||'No email';
+        card.append(top,title,email);
+        if(item.project)card.append(text('p',item.project,'project'));
+        card.append(text('p',item.brief||'No message supplied.','brief'));
+        const reply=document.createElement('a');reply.className='reply';reply.href=`mailto:${encodeURIComponent(item.email||'')}?subject=${encodeURIComponent('Re: your VAYUTA inquiry')}`;reply.textContent='Reply by email';card.append(reply);container.append(card);
+      }
+      $('#inquiriesEmpty').classList.toggle('hidden',rows.length!==0);container.classList.toggle('hidden',rows.length===0);
+    }
+
+    async function refreshSummary(){
+      const summary=await api('/api/admin/summary');
+      $('#statOrders').textContent=summary.stats.orders;$('#statRevenue').textContent=money(summary.stats.revenue);$('#statPending').textContent=summary.stats.pending;$('#statInquiries').textContent=summary.stats.inquiries;
+    }
+
+    async function load(showMessage=false){
+      const refresh=$('#refresh');refresh.disabled=true;
+      try{
+        const [summary,orders,inquiries]=await Promise.all([api('/api/admin/summary'),api('/api/admin/orders'),api('/api/admin/requests')]);
+        state.orders=orders.orders||[];state.inquiries=inquiries.requests||[];
+        $('#loginView').classList.add('hidden');$('#dashboardView').classList.remove('hidden');$('#loading').classList.add('hidden');
+        $('#ordersPanel').classList.toggle('hidden',state.active!=='orders');$('#inquiriesPanel').classList.toggle('hidden',state.active!=='inquiries');
+        $('#statOrders').textContent=summary.stats.orders;$('#statRevenue').textContent=money(summary.stats.revenue);$('#statPending').textContent=summary.stats.pending;$('#statInquiries').textContent=summary.stats.inquiries;
+        $('#ordersCount').textContent=state.orders.length;$('#inquiriesCount').textContent=state.inquiries.length;$('#lastUpdated').textContent=`Updated ${new Intl.DateTimeFormat('en-IN',{timeStyle:'short'}).format(new Date())}`;
+        renderOrders();renderInquiries();if(showMessage)showToast('Admin data refreshed');
+      }catch(error){
+        if(error.status===401){$('#dashboardView').classList.add('hidden');$('#loginView').classList.remove('hidden')}
+        else{showToast(error.message,true);$('#loading').classList.add('hidden')}
+      }finally{refresh.disabled=false}
+    }
+
+    for(const status of STATUSES){const option=document.createElement('option');option.value=status;option.textContent=LABELS[status]||status;$('#statusFilter').append(option)}
+    $('#ordersTab').addEventListener('click',()=>setTab('orders'));$('#inquiriesTab').addEventListener('click',()=>setTab('inquiries'));
+    $('#orderSearch').addEventListener('input',renderOrders);$('#statusFilter').addEventListener('change',renderOrders);$('#inquirySearch').addEventListener('input',renderInquiries);
+    $('#refresh').addEventListener('click',()=>load(true));
+    $('#logout').addEventListener('click',async()=>{try{await api('/api/admin/logout',{method:'POST'})}finally{location.reload()}});
+    load();
+  </script>
+</body>
+</html>
